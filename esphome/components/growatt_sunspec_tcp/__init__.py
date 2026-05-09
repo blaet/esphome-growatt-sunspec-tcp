@@ -3,8 +3,9 @@
 from esphome.components import modbus, sensor
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.const import CONF_ID
+from esphome.const import CONF_ID, CONF_MODEL
 
+CODEOWNERS = ["@blaet"]
 DEPENDENCIES = ["modbus", "sensor", "wifi"]
 AUTO_LOAD = ["sensor"]
 
@@ -17,7 +18,6 @@ CONF_TCP_PORT = "tcp_port"
 CONF_UNIT_ID = "unit_id"
 CONF_RATED_POWER_W = "rated_power_w"
 CONF_MANUFACTURER = "manufacturer"
-CONF_MODEL = "model"
 CONF_SERIAL = "serial"
 CONF_HOLDING_ACTIVE_PCT = "holding_register_active_power_pct"
 CONF_MIN_RTU_GAP = "min_rtu_command_gap"

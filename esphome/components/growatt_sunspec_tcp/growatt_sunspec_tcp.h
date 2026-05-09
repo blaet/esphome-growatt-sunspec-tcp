@@ -11,8 +11,7 @@
 #include <cstring>
 #include <vector>
 
-namespace esphome {
-namespace growatt_sunspec_tcp {
+namespace esphome::growatt_sunspec_tcp {
 
 // Victron SunSpec base address (PDU / logical)
 static const uint16_t SUNSPEC_BASE = 40000;
@@ -135,5 +134,4 @@ class GrowattSunSpecTcp : public Component, public modbus::ModbusDevice {
   sensor::Sensor *cabinet_temp_s_{nullptr};
 };
 
-}  // namespace growatt_sunspec_tcp
-}  // namespace esphome
+}  // namespace esphome::growatt_sunspec_tcp

@@ -6,8 +6,7 @@
 #include <cmath>
 #include <cstring>
 
-namespace esphome {
-namespace growatt_sunspec_tcp {
+namespace esphome::growatt_sunspec_tcp {
 
 static const char *const TAG = "growatt_sunspec_tcp";
 
@@ -31,45 +30,45 @@ void GrowattSunSpecTcp::write_string_regs(uint16_t *regs, const char *str, int m
 }
 
 void GrowattSunSpecTcp::setup() {
-  ESP_LOGCONFIG(TAG,
-                "Growatt SunSpec TCP:\n"
-                "  TCP port: %u  unit_id: %u\n"
-                "  Rated: %u W\n"
-                "  Growatt holding reg (active power %%): %u\n"
-                "  Min RTU spacing: %u ms",
-                tcp_port_, unit_id_, rated_power_w_, holding_active_pct_reg_, min_rtu_gap_ms_);
-
-  build_static_registers_();
-  setup_tcp_server_();
+  this->build_static_registers_();
+  this->setup_tcp_server_();
 }
 
 void GrowattSunSpecTcp::dump_config() {
   ESP_LOGCONFIG(TAG,
-                "Growatt SunSpec TCP: SunSpec base %u, %u registers, manufacturers=%s model=%s", SUNSPEC_BASE,
-                TOTAL_REGS, manufacturer_.c_str(), model_.c_str());
+                "Growatt SunSpec TCP:\n"
+                "  Address: 0x%02X\n"
+                "  TCP port: %u  Unit ID: %u\n"
+                "  Rated power: %u W\n"
+                "  Growatt holding reg (active power %%): %u\n"
+                "  Min RTU spacing: %u ms\n"
+                "  SunSpec base: %u  Registers: %u\n"
+                "  Manufacturer: %s  Model: %s",
+                this->address_, this->tcp_port_, this->unit_id_, this->rated_power_w_, this->holding_active_pct_reg_,
+                this->min_rtu_gap_ms_, SUNSPEC_BASE, TOTAL_REGS, this->manufacturer_.c_str(), this->model_.c_str());
 }
 
 void GrowattSunSpecTcp::build_static_registers_() {
-  register_map_.fill(0xFFFF);
+  this->register_map_.fill(0xFFFF);
 
-  register_map_[OFF_SUNS] = 0x5375;
-  register_map_[OFF_SUNS + 1] = 0x6e53;
+  this->register_map_[OFF_SUNS] = 0x5375;
+  this->register_map_[OFF_SUNS + 1] = 0x6e53;
 
-  register_map_[OFF_MODEL1] = 1;
-  register_map_[OFF_MODEL1 + 1] = MODEL_1_SIZE;
-  uint16_t *m1 = &register_map_[OFF_MODEL1 + 2];
+  this->register_map_[OFF_MODEL1] = 1;
+  this->register_map_[OFF_MODEL1 + 1] = MODEL_1_SIZE;
+  uint16_t *m1 = &this->register_map_[OFF_MODEL1 + 2];
   for (int i = 0; i < MODEL_1_SIZE; i++)
     m1[i] = 0;
-  write_string_regs(&m1[0], manufacturer_.c_str(), 16);
-  write_string_regs(&m1[16], model_.c_str(), 16);
+  write_string_regs(&m1[0], this->manufacturer_.c_str(), 16);
+  write_string_regs(&m1[16], this->model_.c_str(), 16);
   write_string_regs(&m1[40], "1.0.0", 8);
-  write_string_regs(&m1[48], serial_.c_str(), 16);
-  m1[64] = unit_id_;
+  write_string_regs(&m1[48], this->serial_.c_str(), 16);
+  m1[64] = this->unit_id_;
   m1[65] = 0x8000;
 
-  register_map_[OFF_INV] = 101;
-  register_map_[OFF_INV + 1] = MODEL_101_SIZE;
-  uint16_t *inv = &register_map_[OFF_INV + 2];
+  this->register_map_[OFF_INV] = 101;
+  this->register_map_[OFF_INV + 1] = MODEL_101_SIZE;
+  uint16_t *inv = &this->register_map_[OFF_INV + 2];
   for (int i = 0; i < MODEL_101_SIZE; i++)
     inv[i] = 0xFFFF;
 
@@ -89,23 +88,23 @@ void GrowattSunSpecTcp::build_static_registers_() {
   inv[INV_Evt1] = 0;
   inv[INV_Evt1 + 1] = 0;
 
-  register_map_[OFF_M120] = 120;
-  register_map_[OFF_M120 + 1] = MODEL_120_SIZE;
-  uint16_t *m120 = &register_map_[OFF_M120 + 2];
+  this->register_map_[OFF_M120] = 120;
+  this->register_map_[OFF_M120 + 1] = MODEL_120_SIZE;
+  uint16_t *m120 = &this->register_map_[OFF_M120 + 2];
   for (int i = 0; i < MODEL_120_SIZE; i++)
     m120[i] = 0xFFFF;
   m120[0] = 4;
-  m120[1] = rated_power_w_;
+  m120[1] = this->rated_power_w_;
   m120[2] = 0;
-  m120[3] = rated_power_w_;
+  m120[3] = this->rated_power_w_;
   m120[4] = 0;
-  float rated_a = rated_power_w_ > 0 ? (float) rated_power_w_ / 230.0f : 13.0f;
+  float rated_a = this->rated_power_w_ > 0 ? (float) this->rated_power_w_ / 230.0f : 13.0f;
   m120[10] = (uint16_t) (rated_a * 10.0f);
   m120[11] = (uint16_t) (int16_t) -1;
 
-  register_map_[OFF_M123] = 123;
-  register_map_[OFF_M123 + 1] = MODEL_123_SIZE;
-  uint16_t *m123 = &register_map_[OFF_M123 + 2];
+  this->register_map_[OFF_M123] = 123;
+  this->register_map_[OFF_M123 + 1] = MODEL_123_SIZE;
+  uint16_t *m123 = &this->register_map_[OFF_M123 + 2];
   for (int i = 0; i < MODEL_123_SIZE; i++)
     m123[i] = 0xFFFF;
   m123[2] = 1;
@@ -113,8 +112,8 @@ void GrowattSunSpecTcp::build_static_registers_() {
   m123[5] = 1000;
   m123[8] = 0;
 
-  register_map_[OFF_END] = 0xFFFF;
-  register_map_[OFF_END + 1] = 0;
+  this->register_map_[OFF_END] = 0xFFFF;
+  this->register_map_[OFF_END + 1] = 0;
 }
 
 static float sensor_v(sensor::Sensor *s) {
@@ -124,15 +123,15 @@ static float sensor_v(sensor::Sensor *s) {
 }
 
 void GrowattSunSpecTcp::refresh_registers_from_sensors_() {
-  uint16_t *inv = &register_map_[OFF_INV + 2];
+  uint16_t *inv = &this->register_map_[OFF_INV + 2];
 
-  float v = sensor_v(ac_voltage_s_);
-  float a = sensor_v(ac_current_s_);
-  float p = sensor_v(ac_power_s_);
-  float hz = sensor_v(frequency_s_);
-  float kwh = sensor_v(energy_kwh_s_);
-  float pvp = sensor_v(pv_power_s_);
-  float tc = sensor_v(cabinet_temp_s_);
+  float v = sensor_v(this->ac_voltage_s_);
+  float a = sensor_v(this->ac_current_s_);
+  float p = sensor_v(this->ac_power_s_);
+  float hz = sensor_v(this->frequency_s_);
+  float kwh = sensor_v(this->energy_kwh_s_);
+  float pvp = sensor_v(this->pv_power_s_);
+  float tc = sensor_v(this->cabinet_temp_s_);
 
   if (!std::isnan(v)) {
     int vi = (int) (v * 10.0f);
@@ -202,53 +201,52 @@ void GrowattSunSpecTcp::refresh_registers_from_sensors_() {
 }
 
 void GrowattSunSpecTcp::loop() {
-  handle_tcp_clients_();
+  this->handle_tcp_clients_();
 
   uint32_t now = millis();
-  if (now - last_sensor_refresh_ms_ >= 200) {
-    last_sensor_refresh_ms_ = now;
-    refresh_registers_from_sensors_();
+  if (now - this->last_sensor_refresh_ms_ >= 200) {
+    this->last_sensor_refresh_ms_ = now;
+    this->refresh_registers_from_sensors_();
   }
 
-  if (pending_growatt_pct_ != 255 && !expecting_rtu_ack_ && this->ready_for_immediate_send() &&
-      (last_rtu_command_ms_ == 0 || now - last_rtu_command_ms_ >= min_rtu_gap_ms_)) {
-    uint8_t pct = pending_growatt_pct_;
-    pending_growatt_pct_ = 255;
+  if (this->pending_growatt_pct_ != 255 && !this->expecting_rtu_ack_ && this->ready_for_immediate_send() &&
+      (this->last_rtu_command_ms_ == 0 || now - this->last_rtu_command_ms_ >= this->min_rtu_gap_ms_)) {
+    uint8_t pct = this->pending_growatt_pct_;
+    this->pending_growatt_pct_ = 255;
     uint16_t word = pct;
     uint8_t payload[2] = {(uint8_t) (word >> 8), (uint8_t) (word & 0xFF)};
-    this->send(static_cast<uint8_t>(modbus::ModbusFunctionCode::WRITE_SINGLE_REGISTER), holding_active_pct_reg_, 0, 2,
-               payload);
-    expecting_rtu_ack_ = true;
-    last_rtu_command_ms_ = now;
-    ESP_LOGI(TAG, "Growatt RTU: wrote holding %u = active power %% %u", holding_active_pct_reg_, pct);
+    this->send(static_cast<uint8_t>(modbus::ModbusFunctionCode::WRITE_SINGLE_REGISTER), this->holding_active_pct_reg_, 0,
+               2, payload);
+    this->expecting_rtu_ack_ = true;
+    this->last_rtu_command_ms_ = now;
+    ESP_LOGI(TAG, "Growatt RTU: wrote holding %u = active power %% %u", this->holding_active_pct_reg_, pct);
   }
 }
 
 void GrowattSunSpecTcp::on_modbus_data(const std::vector<uint8_t> &data) {
-  if (!expecting_rtu_ack_)
+  if (!this->expecting_rtu_ack_)
     return;
   if (data.size() != 4)
     return;
-  expecting_rtu_ack_ = false;
+  this->expecting_rtu_ack_ = false;
   ESP_LOGD(TAG, "Growatt RTU: FC06 echo (%zu bytes)", data.size());
 }
 
 void GrowattSunSpecTcp::on_modbus_error(uint8_t function_code, uint8_t exception_code) {
-  if (!expecting_rtu_ack_)
+  if (!this->expecting_rtu_ack_)
     return;
-  expecting_rtu_ack_ = false;
+  this->expecting_rtu_ack_ = false;
   ESP_LOGW(TAG, "Growatt RTU: Modbus error fc=0x%02X exc=%u", function_code, exception_code);
 }
 
 #ifdef USE_ESP8266
 
 void GrowattSunSpecTcp::setup_tcp_server_() {
-  wifi_server_.begin(tcp_port_);
-  ESP_LOGI(TAG, "Modbus TCP (SunSpec) on port %u unit_id=%u", tcp_port_, unit_id_);
+  this->wifi_server_.begin(this->tcp_port_);
 }
 
 void GrowattSunSpecTcp::handle_tcp_clients_() {
-  WiFiClient client = wifi_server_.accept();
+  WiFiClient client = this->wifi_server_.accept();
   if (!client)
     return;
   client.setNoDelay(true);
@@ -256,7 +254,7 @@ void GrowattSunSpecTcp::handle_tcp_clients_() {
     uint8_t buf[260];
     int n = client.read(buf, std::min((int) sizeof(buf), client.available()));
     if (n > 0)
-      process_tcp_request_(client, buf, n);
+      this->process_tcp_request_(client, buf, n);
   }
 }
 
@@ -272,11 +270,11 @@ void GrowattSunSpecTcp::process_tcp_request_(WiFiClient &client, uint8_t *buf, i
   if (proto != 0)
     return;
 
-  last_tcp_activity_ms_ = millis();
-  tcp_requests_++;
+  this->last_tcp_activity_ms_ = millis();
+  this->tcp_requests_++;
 
-  if (u != unit_id_) {
-    ESP_LOGD(TAG, "Ignore unit_id %u (want %u)", u, unit_id_);
+  if (u != this->unit_id_) {
+    ESP_LOGD(TAG, "Ignore unit_id %u (want %u)", u, this->unit_id_);
     return;
   }
 
@@ -287,21 +285,21 @@ void GrowattSunSpecTcp::process_tcp_request_(WiFiClient &client, uint8_t *buf, i
       uint16_t start = be16(&buf[8]);
       uint16_t count = be16(&buf[10]);
       if (count > 125) {
-        send_tcp_error_(client, txn_id, u, fc, 0x03);
-        tcp_errors_++;
+        this->send_tcp_error_(client, txn_id, u, fc, 0x03);
+        this->tcp_errors_++;
         return;
       }
       uint16_t values[125];
-      if (!read_sunspec_registers_(start, count, values)) {
-        send_tcp_error_(client, txn_id, u, fc, 0x02);
-        tcp_errors_++;
+      if (!this->read_sunspec_registers_(start, count, values)) {
+        this->send_tcp_error_(client, txn_id, u, fc, 0x02);
+        this->tcp_errors_++;
         return;
       }
       uint8_t resp[251];
       resp[0] = (uint8_t) (count * 2);
       for (uint16_t i = 0; i < count; i++)
         put_be16(&resp[1 + i * 2], values[i]);
-      send_tcp_response_(client, txn_id, u, fc, resp, 1 + count * 2);
+      this->send_tcp_response_(client, txn_id, u, fc, resp, 1 + count * 2);
       break;
     }
     case 0x06: {
@@ -309,15 +307,15 @@ void GrowattSunSpecTcp::process_tcp_request_(WiFiClient &client, uint8_t *buf, i
         return;
       uint16_t reg = be16(&buf[8]);
       uint16_t val = be16(&buf[10]);
-      if (!write_sunspec_registers_(reg, 1, &val)) {
-        send_tcp_error_(client, txn_id, u, fc, 0x02);
-        tcp_errors_++;
+      if (!this->write_sunspec_registers_(reg, 1, &val)) {
+        this->send_tcp_error_(client, txn_id, u, fc, 0x02);
+        this->tcp_errors_++;
         return;
       }
       uint8_t resp[4];
       put_be16(&resp[0], reg);
       put_be16(&resp[2], val);
-      send_tcp_response_(client, txn_id, u, fc, resp, 4);
+      this->send_tcp_response_(client, txn_id, u, fc, resp, 4);
       break;
     }
     case 0x10: {
@@ -326,27 +324,27 @@ void GrowattSunSpecTcp::process_tcp_request_(WiFiClient &client, uint8_t *buf, i
       uint16_t reg = be16(&buf[8]);
       uint16_t cnt = be16(&buf[10]);
       if (len < 13 + cnt * 2 || cnt > 100) {
-        send_tcp_error_(client, txn_id, u, fc, 0x03);
-        tcp_errors_++;
+        this->send_tcp_error_(client, txn_id, u, fc, 0x03);
+        this->tcp_errors_++;
         return;
       }
       uint16_t vals[100];
       for (uint16_t i = 0; i < cnt; i++)
         vals[i] = be16(&buf[13 + i * 2]);
-      if (!write_sunspec_registers_(reg, cnt, vals)) {
-        send_tcp_error_(client, txn_id, u, fc, 0x02);
-        tcp_errors_++;
+      if (!this->write_sunspec_registers_(reg, cnt, vals)) {
+        this->send_tcp_error_(client, txn_id, u, fc, 0x02);
+        this->tcp_errors_++;
         return;
       }
       uint8_t resp[4];
       put_be16(&resp[0], reg);
       put_be16(&resp[2], cnt);
-      send_tcp_response_(client, txn_id, u, fc, resp, 4);
+      this->send_tcp_response_(client, txn_id, u, fc, resp, 4);
       break;
     }
     default:
-      send_tcp_error_(client, txn_id, u, fc, 0x01);
-      tcp_errors_++;
+      this->send_tcp_error_(client, txn_id, u, fc, 0x01);
+      this->tcp_errors_++;
   }
 }
 
@@ -364,7 +362,7 @@ void GrowattSunSpecTcp::send_tcp_response_(WiFiClient &client, uint16_t txn_id, 
 
 void GrowattSunSpecTcp::send_tcp_error_(WiFiClient &client, uint16_t txn_id, uint8_t u, uint8_t fc, uint8_t err) {
   uint8_t data[1] = {err};
-  send_tcp_response_(client, txn_id, u, fc | (uint8_t) 0x80, data, 1);
+  this->send_tcp_response_(client, txn_id, u, fc | (uint8_t) 0x80, data, 1);
 }
 
 #else
@@ -383,7 +381,7 @@ bool GrowattSunSpecTcp::read_sunspec_registers_(uint16_t start_reg, uint16_t cou
   uint16_t off = start_reg - SUNSPEC_BASE;
   if ((uint32_t) off + count > TOTAL_REGS)
     return false;
-  memcpy(out, &register_map_[off], count * sizeof(uint16_t));
+  memcpy(out, &this->register_map_[off], count * sizeof(uint16_t));
   return true;
 }
 
@@ -398,7 +396,7 @@ bool GrowattSunSpecTcp::write_sunspec_registers_(uint16_t start_reg, uint16_t co
   }
 
   for (uint16_t i = 0; i < count; i++)
-    register_map_[off + i] = values[i];
+    this->register_map_[off + i] = values[i];
 
   uint16_t lim_off = OFF_M123 + 2 + 5;
   uint16_t ena_off = OFF_M123 + 2 + 8;
@@ -410,10 +408,10 @@ bool GrowattSunSpecTcp::write_sunspec_registers_(uint16_t start_reg, uint16_t co
     }
   }
   if (touched) {
-    uint16_t pct = register_map_[lim_off];
-    uint16_t ena = register_map_[ena_off];
+    uint16_t pct = this->register_map_[lim_off];
+    uint16_t ena = this->register_map_[ena_off];
     ESP_LOGI(TAG, "DER WMaxLimPct(raw)=%u ena(raw)=%u", pct, ena);
-    forward_power_limit_(pct, ena == 1);
+    this->forward_power_limit_(pct, ena == 1);
   }
   return true;
 }
@@ -429,9 +427,8 @@ void GrowattSunSpecTcp::forward_power_limit_(uint16_t pct_raw, bool enabled) {
       g = 100;
     growatt_pct = (uint8_t) g;
   }
-  pending_growatt_pct_ = growatt_pct;
+  this->pending_growatt_pct_ = growatt_pct;
   ESP_LOGI(TAG, "Queued Growatt active power %% = %u (from SunSpec %.1f%%, ena=%d)", growatt_pct, pct_f, enabled);
 }
 
-}  // namespace growatt_sunspec_tcp
-}  // namespace esphome
+}  // namespace esphome::growatt_sunspec_tcp
