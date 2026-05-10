@@ -250,12 +250,28 @@ void GrowattSunSpecTcp::handle_tcp_clients_() {
   if (!client)
     return;
   client.setNoDelay(true);
-  while (client.connected() && client.available()) {
-    uint8_t buf[260];
-    int n = client.read(buf, std::min((int) sizeof(buf), client.available()));
-    if (n > 0)
-      this->process_tcp_request_(client, buf, n);
+
+  // Drain one full Modbus TCP ADU per accept(); MBAP length avoids fragmented-read bugs.
+  uint8_t buf[260];
+  size_t fill = 0;
+  while (client.connected() && fill < sizeof(buf)) {
+    int avail = client.available();
+    if (avail <= 0)
+      break;
+    int n = client.read(buf + fill, std::min(avail, (int) (sizeof(buf) - fill)));
+    if (n <= 0)
+      break;
+    fill += n;
   }
+
+  if (fill < 8)
+    return;
+
+  uint16_t mbap_len = be16(&buf[4]);
+  if (mbap_len < 2 || mbap_len > sizeof(buf) - 6 || fill < (size_t)(6 + mbap_len))
+    return;
+
+  this->process_tcp_request_(client, buf, (int) (6 + mbap_len));
 }
 
 void GrowattSunSpecTcp::process_tcp_request_(WiFiClient &client, uint8_t *buf, int len) {
@@ -358,6 +374,7 @@ void GrowattSunSpecTcp::send_tcp_response_(WiFiClient &client, uint16_t txn_id, 
   frame[7] = fc;
   memcpy(&frame[8], data, data_len);
   client.write(frame, 8 + data_len);
+  client.flush();
 }
 
 void GrowattSunSpecTcp::send_tcp_error_(WiFiClient &client, uint16_t txn_id, uint8_t u, uint8_t fc, uint8_t err) {
