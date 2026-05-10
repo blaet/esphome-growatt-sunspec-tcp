@@ -92,11 +92,15 @@ class GrowattSunSpecTcp : public Component, public modbus::ModbusDevice {
   uint16_t tcp_port_{502};
 
 #ifdef USE_ESP8266
+  static constexpr size_t TCP_RX_CAP = 260;
   void process_tcp_request_(WiFiClient &client, uint8_t *buf, int len);
   void send_tcp_response_(WiFiClient &client, uint16_t transaction_id, uint8_t u, uint8_t fc, const uint8_t *data,
                           uint16_t data_len);
   void send_tcp_error_(WiFiClient &client, uint16_t transaction_id, uint8_t u, uint8_t fc, uint8_t err);
   WiFiServer wifi_server_{80};
+  WiFiClient tcp_client_;
+  uint8_t tcp_rx_buf_[TCP_RX_CAP]{};
+  size_t tcp_rx_fill_{0};
 #endif
 
   bool read_sunspec_registers_(uint16_t start_reg, uint16_t count, uint16_t *out);

@@ -246,44 +246,46 @@ void GrowattSunSpecTcp::setup_tcp_server_() {
 }
 
 void GrowattSunSpecTcp::handle_tcp_clients_() {
-  WiFiClient client = this->wifi_server_.accept();
-  if (!client)
-    return;
-  client.setNoDelay(true);
-
-  // Wait for a full Modbus TCP ADU: data often arrives after accept(); if we read with
-  // available()==0 we return immediately and ~WiFiClient RSTs the peer (seen as "reset by peer").
-  uint8_t buf[260];
-  size_t fill = 0;
-  const uint32_t deadline_ms = millis() + 500;
-  bool have_frame = false;
-
-  while (client.connected()) {
-    while (client.available() && fill < sizeof(buf)) {
-      int n = client.read(buf + fill, sizeof(buf) - fill);
-      if (n <= 0)
-        break;
-      fill += n;
-    }
-
-    if (fill >= 6) {
-      uint16_t mbap_len = be16(&buf[4]);
-      if (mbap_len >= 2 && mbap_len <= sizeof(buf) - 6 && fill >= (size_t)(6 + mbap_len)) {
-        have_frame = true;
-        break;
-      }
-    }
-
-    if ((int32_t)(millis() - deadline_ms) >= 0)
-      break;
-    yield();
+  // Keep one TCP session open and handle multiple Modbus ADUs across loop() iterations. SunSpec
+  // stacks (Victron dbus-fronius, Home Assistant, pymodbus) reuse the same socket for many
+  // reads; closing after each ADU (~temporary WiFiClient) breaks them while mbpoll -1 still works.
+  if (!this->tcp_client_.connected()) {
+    this->tcp_client_ = this->wifi_server_.accept();
+    this->tcp_rx_fill_ = 0;
+    if (!this->tcp_client_)
+      return;
+    this->tcp_client_.setNoDelay(true);
   }
 
-  if (!have_frame)
-    return;
+  while (this->tcp_client_.available() && this->tcp_rx_fill_ < TCP_RX_CAP) {
+    int n =
+        this->tcp_client_.read(this->tcp_rx_buf_ + this->tcp_rx_fill_, TCP_RX_CAP - this->tcp_rx_fill_);
+    if (n <= 0)
+      break;
+    this->tcp_rx_fill_ += n;
+  }
 
-  uint16_t mbap_len = be16(&buf[4]);
-  this->process_tcp_request_(client, buf, (int) (6 + mbap_len));
+  while (this->tcp_rx_fill_ >= 6) {
+    uint16_t mbap_len = be16(&this->tcp_rx_buf_[4]);
+    if (mbap_len < 2 || mbap_len > TCP_RX_CAP - 6) {
+      ESP_LOGW(TAG, "Invalid MBAP length %u — closing TCP", mbap_len);
+      this->tcp_client_.stop();
+      this->tcp_rx_fill_ = 0;
+      return;
+    }
+    size_t need = 6 + mbap_len;
+    if (this->tcp_rx_fill_ < need)
+      break;
+    this->process_tcp_request_(this->tcp_client_, this->tcp_rx_buf_, (int) need);
+    memmove(this->tcp_rx_buf_, this->tcp_rx_buf_ + need, this->tcp_rx_fill_ - need);
+    this->tcp_rx_fill_ -= need;
+  }
+
+  if (this->tcp_rx_fill_ >= TCP_RX_CAP) {
+    ESP_LOGW(TAG, "Modbus TCP RX buffer full — closing TCP");
+    this->tcp_client_.stop();
+    this->tcp_rx_fill_ = 0;
+  }
 }
 
 void GrowattSunSpecTcp::process_tcp_request_(WiFiClient &client, uint8_t *buf, int len) {

@@ -83,3 +83,24 @@ Offsets are fixed in `growatt_sunspec_tcp.h` (`OFF_*`, `TOTAL_REGS`). Different 
 | Wrong live values | Sensor `id`s and units; compare TCP reads with ESPHome logs. |
 | RTU errors after writes | Increase `min_rtu_command_gap`, `turnaround_time`, or reduce bus traffic. |
 | Limit has no effect | Wrong `holding_register_active_power_pct`; Cerbo not writing expected model 123 fields. |
+
+### Victron GX / `dbus-fronius` (PV inverter discovery)
+
+Discovery is implemented by **dbus-fronius** (SunSpec over Modbus TCP on port **502**). A few details are easy to misread:
+
+| Setting | Meaning |
+|---------|---------|
+| **`/Settings/Fronius/PortNumber`** | **HTTP port for the Fronius Solar API only** (default **80**). It does **not** select Modbus TCP port; the built-in SunSpec client uses **502** (`ModbusTcpClient::DefaultTcpPort`). |
+| **`/Settings/Fronius/IPAddresses`** | Comma-separated manual IPs merged into the **priority** scan list. |
+| **`/Settings/Fronius/AutoScan`** | When enabled, periodic scans also run the UDP discovery phase before walking priority addresses. |
+
+**Silent “no scan” behaviour:** For **TryPriority** / **Priority** scans, dbus-fronius sets **priority-only** mode: it only probes addresses from UDP results plus **`IPAddresses`** / **`KnownIPAddresses`**. If that combined list is **empty**, **no host is scanned** — and **`qDebug()` lines** such as “Starting scan for …” often **do not** appear in `/var/log/dbus-fronius/current` on production images, so the log may look unchanged even when discovery is idle.
+
+**What to try:**
+
+1. On the GX, confirm **`/Settings/Fronius/IPAddresses`** actually contains the ESP IP (no typo; comma-separated if several).
+2. **`/Settings/Fronius/PortNumber`** should stay **80** unless you really use Solar API on another HTTP port — do **not** set it to **502** expecting Modbus (that only sends HTTP at the wrong place).
+3. Trigger a **full LAN scan** once (GX GUI: PV inverter / Fronius **scan all** / auto-detect, or publish **`AutoDetect`** on **`com.victronenergy.fronius`** so **`fullScan()`** runs). A full scan disables priority-only mode and sweeps the local IPv4 subnet, so the ESP can be found even if the manual IP list is wrong.
+4. After changing Fronius settings: **`svc -t /service/dbus-fronius`** (or reboot). A full subnet sweep can take a long time; wait several minutes.
+
+Reference: Victron **dbus-fronius** source (`inverter_gateway.cpp`, `settings.cpp`, `dbus_fronius.cpp`).
