@@ -127,7 +127,9 @@ class GrowattSunSpecTcp : public Component, public modbus::ModbusDevice {
   uint32_t last_rtu_command_ms_{0};
   bool expecting_rtu_ack_{false};
   uint8_t pending_growatt_pct_{255};
-  uint32_t last_sensor_refresh_ms_{0};
+  uint32_t last_sensor_refresh_ms_{};
+  /** SunSpec INV_St: latched "MPPT" (4) vs sleeping (2); avoids Victron showing stand-by on brief AC dips. */
+  bool inv_st_producing_latched_{};
 
   sensor::Sensor *ac_voltage_s_{nullptr};
   sensor::Sensor *ac_current_s_{nullptr};

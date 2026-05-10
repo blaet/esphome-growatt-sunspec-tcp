@@ -159,10 +159,27 @@ void GrowattSunSpecTcp::refresh_registers_from_sensors_() {
     if (pi > 32767)
       pi = 32767;
     inv[INV_W] = (uint16_t) (int16_t) pi;
-    inv[INV_St] = (std::abs(p) > 40.0f) ? 4 : 2;
-  } else {
-    inv[INV_St] = 2;
   }
+
+  // INV_St: SunSpec 101 — 4 = MPPT / producing, 2 = sleeping (Victron often labels 2 as "stand-by").
+  // Hysteresis + PV avoids flicker when |AC power| briefly dips below a single threshold.
+  const float ac_on_w = 22.0f;
+  const float ac_off_w = 8.0f;
+  const float pv_on_w = 35.0f;
+  const float pv_off_w = 15.0f;
+  const bool have_ac = !std::isnan(p);
+  const bool have_pv = !std::isnan(pvp);
+  const bool ac_strong = have_ac && std::abs(p) >= ac_on_w;
+  const bool pv_strong = have_pv && pvp >= pv_on_w;
+  const bool ac_weak = !have_ac || std::abs(p) < ac_off_w;
+  const bool pv_weak = !have_pv || pvp < pv_off_w;
+  if (!this->inv_st_producing_latched_) {
+    if (ac_strong || pv_strong)
+      this->inv_st_producing_latched_ = true;
+  } else if (ac_weak && pv_weak) {
+    this->inv_st_producing_latched_ = false;
+  }
+  inv[INV_St] = this->inv_st_producing_latched_ ? 4 : 2;
 
   if (!std::isnan(hz)) {
     int hi = (int) (hz * 100.0f);
