@@ -1,6 +1,8 @@
 # `growatt_sunspec_tcp` — configuration details
 
-This page supplements the root [README](../README.md) with scaling, timing, and Cerbo-specific behaviour. YAML **configuration variables** are summarized in the README table (ESPHome convention: documented keys are the user-facing contract).
+This page supplements the root [README](../README.md) with scaling, timing, and SunSpec Modbus TCP behaviour. YAML **configuration variables** are summarized in the README table (ESPHome convention: documented keys are the user-facing contract).
+
+**Naming:** SunSpec-neutral wording (TCP peers, models) is used for generic behaviour. Where this document discusses **dbus-fronius**, **D-Bus** services, or **Victron Energy GX / Cerbo** menus and settings, **Victron**, **Cerbo**, and related product names are used on purpose—they name that vendor stack, not a requirement of SunSpec itself.
 
 ## See also
 
@@ -17,7 +19,7 @@ This page supplements the root [README](../README.md) with scaling, timing, and 
 | `modbus_id` | same hub as `growatt_solar` | Shared UART Modbus controller. |
 | `address` | `0x01` | Growatt RTU slave address (must match `growatt_solar`). |
 
-The component validates as a Modbus **client** (`final_validate_modbus_device`, role `client`): it performs RTU writes when Cerbo updates SunSpec limit registers over TCP.
+The component validates as a Modbus **client** (`final_validate_modbus_device`, role `client`): it performs RTU writes when a SunSpec TCP peer updates **model 123** limit registers.
 
 ## Optional sensor inputs
 
@@ -35,7 +37,7 @@ Each optional YAML key is an ESPHome **`sensor`** [`id`](https://esphome.io/comp
 | `pv_power` | W | Signed; mapped to DC power field. |
 | `cabinet_temp` | °C | Signed, stored as `°C * 10`. |
 
-Power factor is not sourced from a sensor; firmware sets a nominal PF register for Cerbo readability.
+Power factor is not sourced from a sensor; firmware sets a nominal PF register for SunSpec readers.
 
 **Refresh:** The SunSpec RAM image is updated from sensors about every **200 ms** in `loop()`, independent of `growatt_solar` `update_interval`.
 
@@ -47,14 +49,14 @@ Power factor is not sourced from a sensor; firmware sets a nominal PF register f
 
 ## Power limit (model 123 → Growatt holding register)
 
-Cerbo writes SunSpec **immediate controls** (model **123**). Modbus TCP writes are only accepted inside the model **123** window; other addresses are rejected.
+SunSpec masters write **immediate controls** via **model 123**. Modbus TCP writes are only accepted inside the model **123** window; other addresses are rejected.
 
 - **WMaxLimPct** (raw): **0.1 %** LSB — divide raw by 10 for percent.
 - **WMaxLim_Ena**: when raw is **1** and scaled percent &lt; ~99.5 %, firmware queues **FC06** to **`holding_register_active_power_pct`** (default **3** on many Growatt Modbus V3.x references — confirm for your inverter).
 
 When limiting is off or full power is requested, the queued percentage becomes **100 %**.
 
-**Idle failsafe:** YAML **`full_power_after_der_silence`** (default **5 min**) resets the Growatt to **100 %** if Cerbo does not write the model **123** limit registers (**WMaxLimPct** / **WMaxLim_Ena**) for that long. Each qualifying write restarts the timer. Set a longer interval if your GX stack rarely refreshes limits while still enforcing them; set **`never`** to disable the watchdog.
+**Idle failsafe:** YAML **`full_power_after_der_silence`** (default **5 min**) resets the Growatt to **100 %** if no TCP peer writes the model **123** limit registers (**WMaxLimPct** / **WMaxLim_Ena**) for that long. Each qualifying write restarts the timer. Set a longer interval if your SunSpec master rarely refreshes limits while still enforcing them; set **`never`** to disable the watchdog.
 
 ## SunSpec layout (logical)
 
@@ -62,10 +64,10 @@ When limiting is off or full power is requested, the queued percentage becomes *
 - **Model 1** — identity strings + metadata.
 - **Model 101** — single-phase inverter instantaneous values (from sensors).
 - **Model 120** — nameplate from `rated_power_w` and derived current estimate.
-- **Model 123** — immediate controls for Victron writes.
+- **Model 123** — immediate controls (writable over Modbus TCP).
 - **End** model marker.
 
-Offsets are fixed in `growatt_sunspec_tcp.h` (`OFF_*`, `TOTAL_REGS`). Different Cerbo/SunSpec expectations may require code changes.
+Offsets are fixed in `growatt_sunspec_tcp.h` (`OFF_*`, `TOTAL_REGS`). Different SunSpec master expectations may require code changes.
 
 ## Modbus TCP support
 
@@ -79,12 +81,14 @@ Offsets are fixed in `growatt_sunspec_tcp.h` (`OFF_*`, `TOTAL_REGS`). Different 
 
 | Symptom | Checks |
 |---------|--------|
-| Cerbo cannot connect | Wi-Fi, firewall, `tcp_port`, ESP IP; single listener on 502. |
+| TCP client cannot connect | Wi-Fi, firewall, `tcp_port`, ESP IP; firmware accepts only one Modbus TCP session at a time. |
 | Wrong live values | Sensor `id`s and units; compare TCP reads with ESPHome logs. |
 | RTU errors after writes | Increase `min_rtu_command_gap`, `turnaround_time`, or reduce bus traffic. |
-| Limit has no effect | Wrong `holding_register_active_power_pct`; Cerbo not writing expected model 123 fields. |
+| Limit has no effect | Wrong `holding_register_active_power_pct`; SunSpec master not writing expected model 123 fields. |
 
-### Victron GX / `dbus-fronius` (PV inverter discovery)
+### Victron Cerbo GX / `dbus-fronius` (D-Bus discovery)
+
+On **Victron Energy Cerbo GX** (and related GX devices), PV inverter discovery for SunSpec TCP is handled by **dbus-fronius**. The notes below use **Victron** / **Cerbo** naming because they refer to D-Bus settings paths, GX GUI flows, and that service—not generic SunSpec.
 
 Discovery is implemented by **dbus-fronius** (SunSpec over Modbus TCP on port **502**). A few details are easy to misread:
 
@@ -98,9 +102,9 @@ Discovery is implemented by **dbus-fronius** (SunSpec over Modbus TCP on port **
 
 **What to try:**
 
-1. On the GX, confirm **`/Settings/Fronius/IPAddresses`** actually contains the ESP IP (no typo; comma-separated if several).
+1. On the GX device, confirm **`/Settings/Fronius/IPAddresses`** actually contains the ESP IP (no typo; comma-separated if several).
 2. **`/Settings/Fronius/PortNumber`** should stay **80** unless you really use Solar API on another HTTP port — do **not** set it to **502** expecting Modbus (that only sends HTTP at the wrong place).
 3. Trigger a **full LAN scan** once (GX GUI: PV inverter / Fronius **scan all** / auto-detect, or publish **`AutoDetect`** on **`com.victronenergy.fronius`** so **`fullScan()`** runs). A full scan disables priority-only mode and sweeps the local IPv4 subnet, so the ESP can be found even if the manual IP list is wrong.
 4. After changing Fronius settings: **`svc -t /service/dbus-fronius`** (or reboot). A full subnet sweep can take a long time; wait several minutes.
 
-Reference: Victron **dbus-fronius** source (`inverter_gateway.cpp`, `settings.cpp`, `dbus_fronius.cpp`).
+Reference (vendor): **dbus-fronius** source (`inverter_gateway.cpp`, `settings.cpp`, `dbus_fronius.cpp`).

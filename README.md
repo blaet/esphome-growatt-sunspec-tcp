@@ -1,19 +1,21 @@
 # Component: `growatt_sunspec_tcp`
 
-Bridge a **Growatt** inverter that already speaks **Modbus RTU** (typically via the bundled [`growatt_solar`](https://esphome.io/components/sensor/growatt_solar.html) sensor on a [`modbus`](https://esphome.io/components/modbus.html) hub) to **Victron GX** using **SunSpec over Modbus TCP**.
+Bridge a **Growatt** inverter that already speaks **Modbus RTU** (typically via the bundled [`growatt_solar`](https://esphome.io/components/sensor/growatt_solar.html) sensor on a [`modbus`](https://esphome.io/components/modbus.html) hub) to **SunSpec Modbus TCP** clients (energy gateways, EMS stacks, test tools).
+
+Documentation defaults to SunSpec-neutral terms; **Victron**, **Cerbo GX**, and **dbus-fronius** still appear where they refer to that vendor’s D-Bus services, settings paths, or GX UI—see [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
 This repository follows the layout described under **Git → Example of git repositories** in the ESPHome [**External Components**](https://esphome.io/components/external_components.html) documentation (`esphome/components/…`).
 
 ## Overview
 
 ```
-Growatt (RS485 RTU) ──► ESP8266 [growatt_solar] ──► sensors ──► [growatt_sunspec_tcp] ◄── Modbus TCP ── Cerbo GX
+Growatt (RS485 RTU) ──► ESP8266 [growatt_solar] ──► sensors ──► [growatt_sunspec_tcp] ◄── Modbus TCP / SunSpec ── EMS / gateway
 ```
 
 | Role | Behaviour |
 |------|-----------|
 | **SunSpec (TCP)** | Logical map at base **40000**, models **1**, **101**, **120**, **123** (+ end). Values come from a RAM image refreshed from linked sensors. |
-| **Growatt (RTU)** | Same chip is a **Modbus master** (`modbus::ModbusDevice`). Cerbo writes to model **123**; firmware translates limits into **FC06** on a configurable holding register (default **3**, “active power %” on many Growatt Modbus V3.x docs). |
+| **Growatt (RTU)** | Same chip is a **Modbus master** (`modbus::ModbusDevice`). SunSpec TCP peers write **model 123** (immediate controls); firmware translates limits into **FC06** on a configurable holding register (default **3**, “active power %” on many Growatt Modbus V3.x docs). |
 
 **Platform:** Modbus TCP listen path is implemented only on **ESP8266**. Other targets log an error at runtime for TCP setup.
 
@@ -21,7 +23,7 @@ Growatt (RS485 RTU) ──► ESP8266 [growatt_solar] ──► sensors ──�
 
 ## Requirements
 
-- [**WiFi**](https://esphome.io/components/wifi.html) (station mode) so the ESP has a LAN IP for the Cerbo.
+- [**WiFi**](https://esphome.io/components/wifi.html) (station mode) so the ESP has a LAN IP reachable by SunSpec Modbus TCP peers.
 - [**UART**](https://esphome.io/components/uart.html) + [**Modbus**](https://esphome.io/components/modbus.html) hub wired to the inverter (same as `growatt_solar`).
 - [**growatt_solar**](https://esphome.io/components/sensor/growatt_solar.html) (or any sensors you map) providing `id:` handles for telemetry.
 
@@ -79,15 +81,15 @@ _In addition to the keys below, this component extends [`COMPONENT_SCHEMA`](http
 
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
-| `tcp_port` | port | `502` | TCP port for SunSpec Modbus (Cerbo connects here). |
-| `unit_id` | int | `126` | Modbus **unit ID** on TCP; must match the Cerbo SunSpec TCP device. Range 1–247. |
+| `tcp_port` | port | `502` | TCP listen port for SunSpec Modbus (IANA default for Modbus TCP). |
+| `unit_id` | int | `126` | Modbus **unit ID** on TCP; must match the SunSpec master’s configured slave/unit ID. Range 1–247. |
 | `rated_power_w` | int | `3000` | Nameplate power (W) for SunSpec model **120**. |
 | `manufacturer` | string | `Growatt` | Model **1** manufacturer string. |
 | `model` | string | `3000-S` | Model **1** model string. |
 | `serial` | string | `GROWATT-SUNSPEC` | Model **1** serial string. |
 | `holding_register_active_power_pct` | int | `3` | Growatt **holding register** for active power limit (%). Protocol-specific; confirm for your firmware. |
-| `min_rtu_command_gap` | time | `850ms` | Minimum delay before this component sends another RTU command (e.g. FC06 after Cerbo writes). Tune with Modbus `turnaround_time` / `send_wait_time`. |
-| `full_power_after_der_silence` | time | `5min` | If Cerbo does not write SunSpec model **123** power-limit registers for this long, firmware queues **100 %** on the Growatt (FC06). Each limit write restarts the timer. Use **`never`** for pre-watchdog behaviour (last limit stays until Cerbo changes it). |
+| `min_rtu_command_gap` | time | `850ms` | Minimum delay before this component sends another RTU command (e.g. FC06 after SunSpec limit writes). Tune with Modbus `turnaround_time` / `send_wait_time`. |
+| `full_power_after_der_silence` | time | `5min` | If no SunSpec **model 123** power-limit registers are written over TCP for this long, firmware queues **100 %** on the Growatt (FC06). Each limit write restarts the timer. Use **`never`** for pre-watchdog behaviour (last limit stays until the master changes it). |
 | `ac_voltage` | [sensor ID](https://esphome.io/components/sensor/) | — | Phase voltage (V) → model **101**. |
 | `ac_current` | sensor ID | — | Current (A) → model **101**. |
 | `ac_power` | sensor ID | — | Power (W) → model **101**. |
@@ -136,14 +138,15 @@ growatt_sunspec_tcp:
   cabinet_temp: inv_temp
 ```
 
-## Victron Cerbo GX
+## SunSpec Modbus TCP clients
 
-1. Ensure the ESP is reachable on the LAN.
-2. Enable [**Modbus TCP**](https://www.victronenergy.com/live/ccgx:modbus_tcp) on the GX if required.
-3. Add a **SunSpec / PV inverter** device: **host** = ESP IP, **port** = `tcp_port`, **unit ID** = `unit_id`.
-4. Avoid duplicate inverter paths (e.g. MQTT `pvinverter` + SunSpec) on the same physical unit.
+1. Ensure the ESP is reachable on the LAN (correct Wi-Fi, firewall allows **`tcp_port`**).
+2. On your SunSpec master or gateway, register this endpoint as a SunSpec-capable PV inverter (or equivalent device type): **host** = ESP IP, **port** = `tcp_port`, **unit ID** = `unit_id`.
+3. Avoid duplicate telemetry paths for the same physical inverter (e.g. MQTT device + SunSpec) unless you intend to merge them downstream.
 
-DER limiting via SunSpec model **123** is described in [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+DER limiting via SunSpec **model 123** is described in [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+
+**Example:** Victron Energy GX devices often expect SunSpec over Modbus TCP on port **502**; see their [Modbus TCP](https://www.victronenergy.com/live/ccgx:modbus_tcp) notes when pairing that stack.
 
 ## Further documentation
 
