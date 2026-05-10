@@ -1,4 +1,4 @@
-"""SunSpec Modbus TCP façade for Growatt (classic RTU) + Victron GX."""
+"""SunSpec Modbus TCP server bridging Growatt classic RTU to SunSpec masters."""
 
 from esphome.components import modbus, sensor
 import esphome.codegen as cg

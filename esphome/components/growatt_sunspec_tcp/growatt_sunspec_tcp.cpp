@@ -164,7 +164,7 @@ void GrowattSunSpecTcp::refresh_registers_from_sensors_() {
     inv[INV_W] = (uint16_t) (int16_t) pi;
   }
 
-  // INV_St: SunSpec 101 — 4 = MPPT / producing, 2 = sleeping (Victron often labels 2 as "stand-by").
+  // INV_St: SunSpec 101 — 4 = MPPT / producing, 2 = sleeping (many dashboards surface 2 as "stand-by").
   // Hysteresis + PV avoids flicker when |AC power| briefly dips below a single threshold.
   const float ac_on_w = 22.0f;
   const float ac_off_w = 8.0f;
@@ -274,7 +274,7 @@ void GrowattSunSpecTcp::setup_tcp_server_() {
 
 void GrowattSunSpecTcp::handle_tcp_clients_() {
   // Keep one TCP session open and handle multiple Modbus ADUs across loop() iterations. SunSpec
-  // stacks (Victron dbus-fronius, Home Assistant, pymodbus) reuse the same socket for many
+  // stacks (Home Assistant SunSpec, pymodbus, vendor-specific masters) reuse the same socket for many
   // reads; closing after each ADU (~temporary WiFiClient) breaks them while mbpoll -1 still works.
   if (!this->tcp_client_.connected()) {
     this->tcp_client_ = this->wifi_server_.accept();

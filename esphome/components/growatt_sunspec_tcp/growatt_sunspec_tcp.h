@@ -13,7 +13,7 @@
 
 namespace esphome::growatt_sunspec_tcp {
 
-// Victron SunSpec base address (PDU / logical)
+// SunSpec logical holding register base (PDU-style addressing on Modbus TCP)
 static const uint16_t SUNSPEC_BASE = 40000;
 
 static const uint16_t MODEL_1_SIZE = 66;
@@ -119,7 +119,7 @@ class GrowattSunSpecTcp : public Component, public modbus::ModbusDevice {
   std::string serial_{"GROWATT-SUNSPEC"};
   uint16_t holding_active_pct_reg_{3};
   uint32_t min_rtu_gap_ms_{850};
-  /** If non-zero: after this many ms without a Cerbo model 123 limit write, queue 100 % on Growatt. */
+  /** If non-zero: after this many ms without a SunSpec model 123 limit write over TCP, queue 100 % on Growatt. */
   uint32_t der_idle_revert_ms_{300000};
 
   std::array<uint16_t, TOTAL_REGS> register_map_{};
@@ -132,7 +132,7 @@ class GrowattSunSpecTcp : public Component, public modbus::ModbusDevice {
   bool expecting_rtu_ack_{false};
   uint8_t pending_growatt_pct_{255};
   uint32_t last_sensor_refresh_ms_{};
-  /** SunSpec INV_St: latched "MPPT" (4) vs sleeping (2); avoids Victron showing stand-by on brief AC dips. */
+  /** SunSpec INV_St: latched "MPPT" (4) vs sleeping (2); reduces stand-by flicker when masters map state 2 loosely. */
   bool inv_st_producing_latched_{};
 
   sensor::Sensor *ac_voltage_s_{nullptr};
