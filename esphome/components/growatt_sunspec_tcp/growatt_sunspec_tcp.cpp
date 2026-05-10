@@ -32,6 +32,7 @@ void GrowattSunSpecTcp::write_string_regs(uint16_t *regs, const char *str, int m
 void GrowattSunSpecTcp::setup() {
   this->build_static_registers_();
   this->setup_tcp_server_();
+  this->last_der_command_ms_ = millis();
 }
 
 void GrowattSunSpecTcp::dump_config() {
@@ -42,10 +43,12 @@ void GrowattSunSpecTcp::dump_config() {
                 "  Rated power: %u W\n"
                 "  Growatt holding reg (active power %%): %u\n"
                 "  Min RTU spacing: %u ms\n"
+                "  DER idle revert: %u ms (0=off)\n"
                 "  SunSpec base: %u  Registers: %u\n"
                 "  Manufacturer: %s  Model: %s",
                 this->address_, this->tcp_port_, this->unit_id_, this->rated_power_w_, this->holding_active_pct_reg_,
-                this->min_rtu_gap_ms_, SUNSPEC_BASE, TOTAL_REGS, this->manufacturer_.c_str(), this->model_.c_str());
+                this->min_rtu_gap_ms_, this->der_idle_revert_ms_, SUNSPEC_BASE, TOTAL_REGS, this->manufacturer_.c_str(),
+                this->model_.c_str());
 }
 
 void GrowattSunSpecTcp::build_static_registers_() {
@@ -224,6 +227,13 @@ void GrowattSunSpecTcp::loop() {
   if (now - this->last_sensor_refresh_ms_ >= 200) {
     this->last_sensor_refresh_ms_ = now;
     this->refresh_registers_from_sensors_();
+  }
+
+  if (this->der_idle_revert_ms_ > 0 && !this->expecting_rtu_ack_ &&
+      (now - this->last_der_command_ms_) >= this->der_idle_revert_ms_) {
+    this->last_der_command_ms_ = now;
+    this->pending_growatt_pct_ = 100;
+    ESP_LOGI(TAG, "DER idle timeout (%u ms): Growatt active power %% -> 100", (unsigned) this->der_idle_revert_ms_);
   }
 
   if (this->pending_growatt_pct_ != 255 && !this->expecting_rtu_ack_ && this->ready_for_immediate_send() &&
@@ -465,6 +475,7 @@ bool GrowattSunSpecTcp::write_sunspec_registers_(uint16_t start_reg, uint16_t co
 }
 
 void GrowattSunSpecTcp::forward_power_limit_(uint16_t pct_raw, bool enabled) {
+  this->last_der_command_ms_ = millis();
   float pct_f = pct_raw / 10.0f;
   uint8_t growatt_pct = 100;
   if (enabled && pct_f < 99.5f) {

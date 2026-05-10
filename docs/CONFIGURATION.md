@@ -29,7 +29,7 @@ Each optional YAML key is an ESPHome **`sensor`** [`id`](https://esphome.io/comp
 |----------|-------------|-------------------|
 | `ac_voltage` | V | Unsigned, stored as `V * 10`. |
 | `ac_current` | A | Unsigned, stored as `A * 100`. |
-| `ac_power` | W | Signed watts; operating state uses `abs(P)` vs ~40 W heuristic. |
+| `ac_power` | W | Signed watts; operating state uses AC/PV hysteresis (see firmware). |
 | `frequency` | Hz | Unsigned, stored as `Hz * 100`. |
 | `energy_kwh` | kWh | Converted to Wh (`value * 1000`), written as 32-bit pair per model 101 WH layout. |
 | `pv_power` | W | Signed; mapped to DC power field. |
@@ -54,7 +54,7 @@ Cerbo writes SunSpec **immediate controls** (model **123**). Modbus TCP writes a
 
 When limiting is off or full power is requested, the queued percentage becomes **100 %**.
 
-There is **no** revert watchdog in this component: if Cerbo stops writing limits, the last Growatt limit stays until something changes it.
+**Idle failsafe:** YAML **`full_power_after_der_silence`** (default **5 min**) resets the Growatt to **100 %** if Cerbo does not write the model **123** limit registers (**WMaxLimPct** / **WMaxLim_Ena**) for that long. Each qualifying write restarts the timer. Set a longer interval if your GX stack rarely refreshes limits while still enforcing them; set **`never`** to disable the watchdog.
 
 ## SunSpec layout (logical)
 

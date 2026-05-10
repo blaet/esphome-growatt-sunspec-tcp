@@ -87,6 +87,7 @@ _In addition to the keys below, this component extends [`COMPONENT_SCHEMA`](http
 | `serial` | string | `GROWATT-SUNSPEC` | Model **1** serial string. |
 | `holding_register_active_power_pct` | int | `3` | Growatt **holding register** for active power limit (%). Protocol-specific; confirm for your firmware. |
 | `min_rtu_command_gap` | time | `850ms` | Minimum delay before this component sends another RTU command (e.g. FC06 after Cerbo writes). Tune with Modbus `turnaround_time` / `send_wait_time`. |
+| `full_power_after_der_silence` | time | `5min` | If Cerbo does not write SunSpec model **123** power-limit registers for this long, firmware queues **100 %** on the Growatt (FC06). Each limit write restarts the timer. Use **`never`** for pre-watchdog behaviour (last limit stays until Cerbo changes it). |
 | `ac_voltage` | [sensor ID](https://esphome.io/components/sensor/) | — | Phase voltage (V) → model **101**. |
 | `ac_current` | sensor ID | — | Current (A) → model **101**. |
 | `ac_power` | sensor ID | — | Power (W) → model **101**. |

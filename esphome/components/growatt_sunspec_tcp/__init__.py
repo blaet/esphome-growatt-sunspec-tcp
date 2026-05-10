@@ -21,6 +21,7 @@ CONF_MANUFACTURER = "manufacturer"
 CONF_SERIAL = "serial"
 CONF_HOLDING_ACTIVE_PCT = "holding_register_active_power_pct"
 CONF_MIN_RTU_GAP = "min_rtu_command_gap"
+CONF_FULL_POWER_AFTER_DER_SILENCE = "full_power_after_der_silence"
 
 CONF_AC_VOLTAGE = "ac_voltage"
 CONF_AC_CURRENT = "ac_current"
@@ -43,6 +44,10 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_SERIAL, default="GROWATT-SUNSPEC"): cv.string,
             cv.Optional(CONF_HOLDING_ACTIVE_PCT, default=3): cv.int_range(min=0, max=65535),
             cv.Optional(CONF_MIN_RTU_GAP, default="850ms"): cv.positive_time_period_milliseconds,
+            cv.Optional(CONF_FULL_POWER_AFTER_DER_SILENCE, default="5min"): cv.Any(
+                cv.one_of("never"),
+                cv.positive_time_period_milliseconds,
+            ),
             cv.Optional(CONF_AC_VOLTAGE): cv.use_id(sensor.Sensor),
             cv.Optional(CONF_AC_CURRENT): cv.use_id(sensor.Sensor),
             cv.Optional(CONF_AC_POWER): cv.use_id(sensor.Sensor),
@@ -75,6 +80,11 @@ async def to_code(config):
     cg.add(var.set_serial(config[CONF_SERIAL]))
     cg.add(var.set_holding_active_pct_reg(config[CONF_HOLDING_ACTIVE_PCT]))
     cg.add(var.set_min_rtu_gap_ms(config[CONF_MIN_RTU_GAP]))
+    silence = config[CONF_FULL_POWER_AFTER_DER_SILENCE]
+    if silence == "never":
+        cg.add(var.set_der_idle_revert_ms(0))
+    else:
+        cg.add(var.set_der_idle_revert_ms(silence))
 
     if CONF_AC_VOLTAGE in config:
         cg.add(var.set_ac_voltage_sensor(await cg.get_variable(config[CONF_AC_VOLTAGE])))

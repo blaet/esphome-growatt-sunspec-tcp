@@ -76,6 +76,7 @@ class GrowattSunSpecTcp : public Component, public modbus::ModbusDevice {
   void set_serial(const std::string &s) { serial_ = s; }
   void set_holding_active_pct_reg(uint16_t r) { holding_active_pct_reg_ = r; }
   void set_min_rtu_gap_ms(uint32_t ms) { min_rtu_gap_ms_ = ms; }
+  void set_der_idle_revert_ms(uint32_t ms) { der_idle_revert_ms_ = ms; }
 
   void set_ac_voltage_sensor(sensor::Sensor *s) { ac_voltage_s_ = s; }
   void set_ac_current_sensor(sensor::Sensor *s) { ac_current_s_ = s; }
@@ -118,6 +119,8 @@ class GrowattSunSpecTcp : public Component, public modbus::ModbusDevice {
   std::string serial_{"GROWATT-SUNSPEC"};
   uint16_t holding_active_pct_reg_{3};
   uint32_t min_rtu_gap_ms_{850};
+  /** If non-zero: after this many ms without a Cerbo model 123 limit write, queue 100 % on Growatt. */
+  uint32_t der_idle_revert_ms_{300000};
 
   std::array<uint16_t, TOTAL_REGS> register_map_{};
 
@@ -125,6 +128,7 @@ class GrowattSunSpecTcp : public Component, public modbus::ModbusDevice {
   uint32_t tcp_errors_{0};
   uint32_t last_tcp_activity_ms_{0};
   uint32_t last_rtu_command_ms_{0};
+  uint32_t last_der_command_ms_{0};
   bool expecting_rtu_ack_{false};
   uint8_t pending_growatt_pct_{255};
   uint32_t last_sensor_refresh_ms_{};
