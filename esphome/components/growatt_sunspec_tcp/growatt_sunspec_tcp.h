@@ -131,6 +131,9 @@ class GrowattSunSpecTcp : public Component, public modbus::ModbusDevice {
   uint32_t last_der_command_ms_{0};
   bool expecting_rtu_ack_{false};
   uint8_t pending_growatt_pct_{255};
+  /** Last active-power %% acknowledged from Growatt via FC06; 255 = unknown (always queue next write). */
+  uint8_t last_applied_growatt_pct_{255};
+  uint8_t inflight_growatt_pct_{255};
   uint32_t last_sensor_refresh_ms_{};
   /** SunSpec INV_St: latched "MPPT" (4) vs sleeping (2); reduces stand-by flicker when masters map state 2 loosely. */
   bool inv_st_producing_latched_{};

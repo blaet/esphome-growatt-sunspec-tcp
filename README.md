@@ -150,7 +150,7 @@ DER limiting via SunSpec **model 123** is described in [docs/CONFIGURATION.md](d
 
 ## Further documentation
 
-- [docs/CONFIGURATION.md](docs/CONFIGURATION.md) — scaling, RTU sharing, model **123** → Growatt register behaviour, troubleshooting.
+- [docs/CONFIGURATION.md](docs/CONFIGURATION.md) — scaling, RTU sharing, model **123** → Growatt register behaviour, repeated-write behaviour, troubleshooting.
 
 ## See also
 

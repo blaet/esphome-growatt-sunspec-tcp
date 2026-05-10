@@ -56,6 +56,8 @@ SunSpec masters write **immediate controls** via **model 123**. Modbus TCP write
 
 When limiting is off or full power is requested, the queued percentage becomes **100 %**.
 
+**Repeated writes:** Many SunSpec stacks periodically rewrite **model 123** even when the limit did not change. The firmware tracks the last **FC06** that succeeded and **does not re-send** the same active-power **%** to the Growatt, because some Growatt units react badly to identical limit writes on a timer (e.g. MPPT interruptions every few seconds).
+
 **Idle failsafe:** YAML **`full_power_after_der_silence`** (default **5 min**) resets the Growatt to **100 %** if no TCP peer writes the model **123** limit registers (**WMaxLimPct** / **WMaxLim_Ena**) for that long. Each qualifying write restarts the timer. Set a longer interval if your SunSpec master rarely refreshes limits while still enforcing them; set **`never`** to disable the watchdog.
 
 ## SunSpec layout (logical)
