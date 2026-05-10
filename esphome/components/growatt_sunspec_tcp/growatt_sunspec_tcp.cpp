@@ -251,26 +251,38 @@ void GrowattSunSpecTcp::handle_tcp_clients_() {
     return;
   client.setNoDelay(true);
 
-  // Drain one full Modbus TCP ADU per accept(); MBAP length avoids fragmented-read bugs.
+  // Wait for a full Modbus TCP ADU: data often arrives after accept(); if we read with
+  // available()==0 we return immediately and ~WiFiClient RSTs the peer (seen as "reset by peer").
   uint8_t buf[260];
   size_t fill = 0;
-  while (client.connected() && fill < sizeof(buf)) {
-    int avail = client.available();
-    if (avail <= 0)
+  const uint32_t deadline_ms = millis() + 500;
+  bool have_frame = false;
+
+  while (client.connected()) {
+    while (client.available() && fill < sizeof(buf)) {
+      int n = client.read(buf + fill, sizeof(buf) - fill);
+      if (n <= 0)
+        break;
+      fill += n;
+    }
+
+    if (fill >= 6) {
+      uint16_t mbap_len = be16(&buf[4]);
+      if (mbap_len >= 2 && mbap_len <= sizeof(buf) - 6 && fill >= (size_t)(6 + mbap_len)) {
+        have_frame = true;
+        break;
+      }
+    }
+
+    if ((int32_t)(millis() - deadline_ms) >= 0)
       break;
-    int n = client.read(buf + fill, std::min(avail, (int) (sizeof(buf) - fill)));
-    if (n <= 0)
-      break;
-    fill += n;
+    yield();
   }
 
-  if (fill < 8)
+  if (!have_frame)
     return;
 
   uint16_t mbap_len = be16(&buf[4]);
-  if (mbap_len < 2 || mbap_len > sizeof(buf) - 6 || fill < (size_t)(6 + mbap_len))
-    return;
-
   this->process_tcp_request_(client, buf, (int) (6 + mbap_len));
 }
 
