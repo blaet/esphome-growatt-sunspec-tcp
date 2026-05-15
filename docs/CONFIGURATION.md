@@ -2,8 +2,6 @@
 
 This page supplements the root [README](../README.md) with scaling, timing, and SunSpec Modbus TCP behaviour. YAML **configuration variables** are summarized in the README table (ESPHome convention: documented keys are the user-facing contract).
 
-**Naming:** SunSpec-neutral wording (TCP peers, models) is used for generic behaviour. Where this document discusses **dbus-fronius**, **D-Bus** services, or **Victron Energy GX / Cerbo** menus and settings, **Victron**, **Cerbo**, and related product names are used on purpose—they name that vendor stack, not a requirement of SunSpec itself.
-
 ## See also
 
 - [External Components](https://esphome.io/components/external_components.html)
@@ -90,7 +88,7 @@ Offsets are fixed in `growatt_sunspec_tcp.h` (`OFF_*`, `TOTAL_REGS`). Different 
 
 ### Victron Cerbo GX / `dbus-fronius` (D-Bus discovery)
 
-On **Victron Energy Cerbo GX** (and related GX devices), PV inverter discovery for SunSpec TCP is handled by **dbus-fronius**. The notes below use **Victron** / **Cerbo** naming because they refer to D-Bus settings paths, GX GUI flows, and that service—not generic SunSpec.
+On **Victron Energy Cerbo GX** (and related GX devices), PV inverter discovery for SunSpec over Modbus TCP is handled by **dbus-fronius**. The settings and log paths below match that stack.
 
 Discovery is implemented by **dbus-fronius** (SunSpec over Modbus TCP on port **502**). A few details are easy to misread:
 

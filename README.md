@@ -4,8 +4,6 @@ ESPHome **SunSpec Modbus TCP** bridge components (generic **`sunspec_inverter_tc
 
 Bridge a **Growatt** inverter that already speaks **Modbus RTU** (typically via the bundled [`growatt_solar`](https://esphome.io/components/sensor/growatt_solar.html) sensor on a [`modbus`](https://esphome.io/components/modbus.html) hub) to **SunSpec Modbus TCP** clients (energy gateways, EMS stacks, test tools).
 
-Documentation defaults to SunSpec-neutral terms; **Victron**, **Cerbo GX**, and **dbus-fronius** still appear where they refer to that vendor’s D-Bus services, settings paths, or GX UI—see [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
-
 This repository follows the layout described under **Git → Example of git repositories** in the ESPHome [**External Components**](https://esphome.io/components/external_components.html) documentation (`esphome/components/…`).
 
 ## Overview
@@ -183,8 +181,6 @@ growatt_sunspec_tcp:
 3. Avoid duplicate telemetry paths for the same physical inverter (e.g. MQTT device + SunSpec) unless you intend to merge them downstream.
 
 DER limiting via SunSpec **model 123** is described in [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
-
-**Example:** Victron Energy GX devices often expect SunSpec over Modbus TCP on port **502**; see their [Modbus TCP](https://www.victronenergy.com/live/ccgx:modbus_tcp) notes when pairing that stack.
 
 ## Further documentation
 
