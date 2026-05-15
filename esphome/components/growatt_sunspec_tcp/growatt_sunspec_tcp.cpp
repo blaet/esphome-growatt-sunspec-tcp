@@ -2,36 +2,16 @@
 #include "esphome/components/modbus/modbus_definitions.h"
 #include "esphome/core/hal.h"
 #include "esphome/core/log.h"
-#include <algorithm>
-#include <cmath>
-#include <cstring>
 
 namespace esphome::growatt_sunspec_tcp {
 
 static const char *const TAG = "growatt_sunspec_tcp";
 
-static uint16_t be16(const uint8_t *p) { return ((uint16_t) p[0] << 8) | p[1]; }
-static void put_be16(uint8_t *p, uint16_t v) {
-  p[0] = v >> 8;
-  p[1] = v & 0xFF;
-}
-
-void GrowattSunSpecTcp::write_string_regs(uint16_t *regs, const char *str, int max_regs) {
-  memset(regs, 0, max_regs * sizeof(uint16_t));
-  int len = strlen(str);
-  if (len > max_regs * 2)
-    len = max_regs * 2;
-  for (int i = 0; i < len; i++) {
-    if (i % 2 == 0)
-      regs[i / 2] = ((uint16_t) (uint8_t) str[i]) << 8;
-    else
-      regs[i / 2] |= (uint8_t) str[i];
-  }
-}
-
 void GrowattSunSpecTcp::setup() {
-  this->build_static_registers_();
-  this->setup_tcp_server_();
+  this->bridge_.set_log_tag(TAG);
+  this->bridge_.build_static_registers();
+  this->bridge_.set_der_callback([this](uint16_t pct_raw, bool enabled) { this->forward_power_limit_(pct_raw, enabled); });
+  this->bridge_.setup_tcp();
   this->last_der_command_ms_ = millis();
 }
 
@@ -46,188 +26,17 @@ void GrowattSunSpecTcp::dump_config() {
                 "  DER idle revert: %u ms (0=off)\n"
                 "  SunSpec base: %u  Registers: %u\n"
                 "  Manufacturer: %s  Model: %s",
-                this->address_, this->tcp_port_, this->unit_id_, this->rated_power_w_, this->holding_active_pct_reg_,
-                this->min_rtu_gap_ms_, this->der_idle_revert_ms_, SUNSPEC_BASE, TOTAL_REGS, this->manufacturer_.c_str(),
-                this->model_.c_str());
-}
-
-void GrowattSunSpecTcp::build_static_registers_() {
-  this->register_map_.fill(0xFFFF);
-
-  this->register_map_[OFF_SUNS] = 0x5375;
-  this->register_map_[OFF_SUNS + 1] = 0x6e53;
-
-  this->register_map_[OFF_MODEL1] = 1;
-  this->register_map_[OFF_MODEL1 + 1] = MODEL_1_SIZE;
-  uint16_t *m1 = &this->register_map_[OFF_MODEL1 + 2];
-  for (int i = 0; i < MODEL_1_SIZE; i++)
-    m1[i] = 0;
-  write_string_regs(&m1[0], this->manufacturer_.c_str(), 16);
-  write_string_regs(&m1[16], this->model_.c_str(), 16);
-  write_string_regs(&m1[40], "1.0.0", 8);
-  write_string_regs(&m1[48], this->serial_.c_str(), 16);
-  m1[64] = this->unit_id_;
-  m1[65] = 0x8000;
-
-  this->register_map_[OFF_INV] = 101;
-  this->register_map_[OFF_INV + 1] = MODEL_101_SIZE;
-  uint16_t *inv = &this->register_map_[OFF_INV + 2];
-  for (int i = 0; i < MODEL_101_SIZE; i++)
-    inv[i] = 0xFFFF;
-
-  inv[INV_A_SF] = (uint16_t) (int16_t) -2;
-  inv[INV_V_SF] = (uint16_t) (int16_t) -1;
-  inv[INV_W_SF] = (uint16_t) (int16_t) 0;
-  inv[INV_Hz_SF] = (uint16_t) (int16_t) -2;
-  inv[INV_VA_SF] = (uint16_t) (int16_t) 0;
-  inv[INV_VAr_SF] = (uint16_t) (int16_t) 0;
-  inv[INV_PF_SF] = (uint16_t) (int16_t) -2;
-  inv[INV_WH_SF] = (uint16_t) (int16_t) 0;
-  inv[INV_DCA_SF] = (uint16_t) (int16_t) -2;
-  inv[INV_DCV_SF] = (uint16_t) (int16_t) -1;
-  inv[INV_DCW_SF] = (uint16_t) (int16_t) 0;
-  inv[INV_Tmp_SF] = (uint16_t) (int16_t) -1;
-  inv[INV_St] = 2;
-  inv[INV_Evt1] = 0;
-  inv[INV_Evt1 + 1] = 0;
-
-  this->register_map_[OFF_M120] = 120;
-  this->register_map_[OFF_M120 + 1] = MODEL_120_SIZE;
-  uint16_t *m120 = &this->register_map_[OFF_M120 + 2];
-  for (int i = 0; i < MODEL_120_SIZE; i++)
-    m120[i] = 0xFFFF;
-  m120[0] = 4;
-  m120[1] = this->rated_power_w_;
-  m120[2] = 0;
-  m120[3] = this->rated_power_w_;
-  m120[4] = 0;
-  float rated_a = this->rated_power_w_ > 0 ? (float) this->rated_power_w_ / 230.0f : 13.0f;
-  m120[10] = (uint16_t) (rated_a * 10.0f);
-  m120[11] = (uint16_t) (int16_t) -1;
-
-  this->register_map_[OFF_M123] = 123;
-  this->register_map_[OFF_M123 + 1] = MODEL_123_SIZE;
-  uint16_t *m123 = &this->register_map_[OFF_M123 + 2];
-  for (int i = 0; i < MODEL_123_SIZE; i++)
-    m123[i] = 0xFFFF;
-  m123[2] = 1;
-  m123[3] = (uint16_t) (int16_t) -1;
-  m123[5] = 1000;
-  m123[8] = 0;
-
-  this->register_map_[OFF_END] = 0xFFFF;
-  this->register_map_[OFF_END + 1] = 0;
-}
-
-static float sensor_v(sensor::Sensor *s) {
-  if (s == nullptr || !s->has_state())
-    return NAN;
-  return s->get_state();
-}
-
-void GrowattSunSpecTcp::refresh_registers_from_sensors_() {
-  uint16_t *inv = &this->register_map_[OFF_INV + 2];
-
-  float v = sensor_v(this->ac_voltage_s_);
-  float a = sensor_v(this->ac_current_s_);
-  float p = sensor_v(this->ac_power_s_);
-  float hz = sensor_v(this->frequency_s_);
-  float kwh = sensor_v(this->energy_kwh_s_);
-  float pvp = sensor_v(this->pv_power_s_);
-  float tc = sensor_v(this->cabinet_temp_s_);
-
-  if (!std::isnan(v)) {
-    int vi = (int) (v * 10.0f);
-    if (vi < 0)
-      vi = 0;
-    if (vi > 65535)
-      vi = 65535;
-    inv[INV_PhVphA] = (uint16_t) vi;
-  }
-
-  if (!std::isnan(a)) {
-    int ai = (int) (a * 100.0f);
-    if (ai < 0)
-      ai = 0;
-    if (ai > 65535)
-      ai = 65535;
-    inv[INV_A] = (uint16_t) ai;
-    inv[INV_AphA] = (uint16_t) ai;
-  }
-
-  if (!std::isnan(p)) {
-    int pi = (int) p;
-    if (pi < -32768)
-      pi = -32768;
-    if (pi > 32767)
-      pi = 32767;
-    inv[INV_W] = (uint16_t) (int16_t) pi;
-  }
-
-  // INV_St: SunSpec 101 — 4 = MPPT / producing, 2 = sleeping (many dashboards surface 2 as "stand-by").
-  // Hysteresis + PV avoids flicker when |AC power| briefly dips below a single threshold.
-  const float ac_on_w = 22.0f;
-  const float ac_off_w = 8.0f;
-  const float pv_on_w = 35.0f;
-  const float pv_off_w = 15.0f;
-  const bool have_ac = !std::isnan(p);
-  const bool have_pv = !std::isnan(pvp);
-  const bool ac_strong = have_ac && std::abs(p) >= ac_on_w;
-  const bool pv_strong = have_pv && pvp >= pv_on_w;
-  const bool ac_weak = !have_ac || std::abs(p) < ac_off_w;
-  const bool pv_weak = !have_pv || pvp < pv_off_w;
-  if (!this->inv_st_producing_latched_) {
-    if (ac_strong || pv_strong)
-      this->inv_st_producing_latched_ = true;
-  } else if (ac_weak && pv_weak) {
-    this->inv_st_producing_latched_ = false;
-  }
-  inv[INV_St] = this->inv_st_producing_latched_ ? 4 : 2;
-
-  if (!std::isnan(hz)) {
-    int hi = (int) (hz * 100.0f);
-    if (hi < 0)
-      hi = 0;
-    if (hi > 65535)
-      hi = 65535;
-    inv[INV_Hz] = (uint16_t) hi;
-  }
-
-  if (!std::isnan(kwh) && kwh >= 0) {
-    uint32_t wh = (uint32_t) (kwh * 1000.0f);
-    inv[INV_WH] = (uint16_t) (wh >> 16);
-    inv[INV_WH + 1] = (uint16_t) (wh & 0xFFFF);
-  }
-
-  if (!std::isnan(pvp)) {
-    int dpi = (int) pvp;
-    if (dpi < -32768)
-      dpi = -32768;
-    if (dpi > 32767)
-      dpi = 32767;
-    inv[INV_DCW] = (uint16_t) (int16_t) dpi;
-  }
-
-  if (!std::isnan(tc)) {
-    int ti = (int) (tc * 10.0f);
-    if (ti < -32768)
-      ti = -32768;
-    if (ti > 32767)
-      ti = 32767;
-    inv[INV_TmpCab] = (uint16_t) (int16_t) ti;
-  }
-
-  inv[INV_PF] = (uint16_t) (int16_t) 100;
+                this->address_, this->bridge_.get_tcp_port(), this->bridge_.get_unit_id(), this->bridge_.get_rated_power_w(),
+                this->holding_active_pct_reg_, this->min_rtu_gap_ms_, this->der_idle_revert_ms_,
+                sunspec_tcp_bridge::SUNSPEC_BASE, sunspec_tcp_bridge::TOTAL_REGS, this->bridge_.get_manufacturer().c_str(),
+                this->bridge_.get_model().c_str());
 }
 
 void GrowattSunSpecTcp::loop() {
-  this->handle_tcp_clients_();
+  this->bridge_.loop_tcp();
+  this->bridge_.refresh_sensors_tick();
 
   uint32_t now = millis();
-  if (now - this->last_sensor_refresh_ms_ >= 200) {
-    this->last_sensor_refresh_ms_ = now;
-    this->refresh_registers_from_sensors_();
-  }
 
   if (this->der_idle_revert_ms_ > 0 && !this->expecting_rtu_ack_ &&
       (now - this->last_der_command_ms_) >= this->der_idle_revert_ms_) {
@@ -277,214 +86,6 @@ void GrowattSunSpecTcp::on_modbus_error(uint8_t function_code, uint8_t exception
   ESP_LOGW(TAG, "Growatt RTU: Modbus error fc=0x%02X exc=%u", function_code, exception_code);
 }
 
-#ifdef USE_ESP8266
-
-void GrowattSunSpecTcp::setup_tcp_server_() {
-  this->wifi_server_.begin(this->tcp_port_);
-}
-
-void GrowattSunSpecTcp::handle_tcp_clients_() {
-  // Keep one TCP session open and handle multiple Modbus ADUs across loop() iterations. SunSpec
-  // stacks (Home Assistant SunSpec, pymodbus, vendor-specific masters) reuse the same socket for many
-  // reads; closing after each ADU (~temporary WiFiClient) breaks them while mbpoll -1 still works.
-  if (!this->tcp_client_.connected()) {
-    this->tcp_client_ = this->wifi_server_.accept();
-    this->tcp_rx_fill_ = 0;
-    if (!this->tcp_client_)
-      return;
-    this->tcp_client_.setNoDelay(true);
-  }
-
-  while (this->tcp_client_.available() && this->tcp_rx_fill_ < TCP_RX_CAP) {
-    int n =
-        this->tcp_client_.read(this->tcp_rx_buf_ + this->tcp_rx_fill_, TCP_RX_CAP - this->tcp_rx_fill_);
-    if (n <= 0)
-      break;
-    this->tcp_rx_fill_ += n;
-  }
-
-  while (this->tcp_rx_fill_ >= 6) {
-    uint16_t mbap_len = be16(&this->tcp_rx_buf_[4]);
-    if (mbap_len < 2 || mbap_len > TCP_RX_CAP - 6) {
-      ESP_LOGW(TAG, "Invalid MBAP length %u — closing TCP", mbap_len);
-      this->tcp_client_.stop();
-      this->tcp_rx_fill_ = 0;
-      return;
-    }
-    size_t need = 6 + mbap_len;
-    if (this->tcp_rx_fill_ < need)
-      break;
-    this->process_tcp_request_(this->tcp_client_, this->tcp_rx_buf_, (int) need);
-    memmove(this->tcp_rx_buf_, this->tcp_rx_buf_ + need, this->tcp_rx_fill_ - need);
-    this->tcp_rx_fill_ -= need;
-  }
-
-  if (this->tcp_rx_fill_ >= TCP_RX_CAP) {
-    ESP_LOGW(TAG, "Modbus TCP RX buffer full — closing TCP");
-    this->tcp_client_.stop();
-    this->tcp_rx_fill_ = 0;
-  }
-}
-
-void GrowattSunSpecTcp::process_tcp_request_(WiFiClient &client, uint8_t *buf, int len) {
-  if (len < 8)
-    return;
-
-  uint16_t txn_id = be16(&buf[0]);
-  uint16_t proto = be16(&buf[2]);
-  uint8_t u = buf[6];
-  uint8_t fc = buf[7];
-
-  if (proto != 0)
-    return;
-
-  this->last_tcp_activity_ms_ = millis();
-  this->tcp_requests_++;
-
-  if (u != this->unit_id_) {
-    ESP_LOGD(TAG, "Ignore unit_id %u (want %u)", u, this->unit_id_);
-    return;
-  }
-
-  switch (fc) {
-    case 0x03: {
-      if (len < 12)
-        return;
-      uint16_t start = be16(&buf[8]);
-      uint16_t count = be16(&buf[10]);
-      if (count > 125) {
-        this->send_tcp_error_(client, txn_id, u, fc, 0x03);
-        this->tcp_errors_++;
-        return;
-      }
-      uint16_t values[125];
-      if (!this->read_sunspec_registers_(start, count, values)) {
-        this->send_tcp_error_(client, txn_id, u, fc, 0x02);
-        this->tcp_errors_++;
-        return;
-      }
-      uint8_t resp[251];
-      resp[0] = (uint8_t) (count * 2);
-      for (uint16_t i = 0; i < count; i++)
-        put_be16(&resp[1 + i * 2], values[i]);
-      this->send_tcp_response_(client, txn_id, u, fc, resp, 1 + count * 2);
-      break;
-    }
-    case 0x06: {
-      if (len < 12)
-        return;
-      uint16_t reg = be16(&buf[8]);
-      uint16_t val = be16(&buf[10]);
-      if (!this->write_sunspec_registers_(reg, 1, &val)) {
-        this->send_tcp_error_(client, txn_id, u, fc, 0x02);
-        this->tcp_errors_++;
-        return;
-      }
-      uint8_t resp[4];
-      put_be16(&resp[0], reg);
-      put_be16(&resp[2], val);
-      this->send_tcp_response_(client, txn_id, u, fc, resp, 4);
-      break;
-    }
-    case 0x10: {
-      if (len < 13)
-        return;
-      uint16_t reg = be16(&buf[8]);
-      uint16_t cnt = be16(&buf[10]);
-      if (len < 13 + cnt * 2 || cnt > 100) {
-        this->send_tcp_error_(client, txn_id, u, fc, 0x03);
-        this->tcp_errors_++;
-        return;
-      }
-      uint16_t vals[100];
-      for (uint16_t i = 0; i < cnt; i++)
-        vals[i] = be16(&buf[13 + i * 2]);
-      if (!this->write_sunspec_registers_(reg, cnt, vals)) {
-        this->send_tcp_error_(client, txn_id, u, fc, 0x02);
-        this->tcp_errors_++;
-        return;
-      }
-      uint8_t resp[4];
-      put_be16(&resp[0], reg);
-      put_be16(&resp[2], cnt);
-      this->send_tcp_response_(client, txn_id, u, fc, resp, 4);
-      break;
-    }
-    default:
-      this->send_tcp_error_(client, txn_id, u, fc, 0x01);
-      this->tcp_errors_++;
-  }
-}
-
-void GrowattSunSpecTcp::send_tcp_response_(WiFiClient &client, uint16_t txn_id, uint8_t u, uint8_t fc,
-                                           const uint8_t *data, uint16_t data_len) {
-  uint8_t frame[260];
-  put_be16(&frame[0], txn_id);
-  put_be16(&frame[2], 0);
-  put_be16(&frame[4], (uint16_t) (1 + 1 + data_len));
-  frame[6] = u;
-  frame[7] = fc;
-  memcpy(&frame[8], data, data_len);
-  client.write(frame, 8 + data_len);
-  client.flush();
-}
-
-void GrowattSunSpecTcp::send_tcp_error_(WiFiClient &client, uint16_t txn_id, uint8_t u, uint8_t fc, uint8_t err) {
-  uint8_t data[1] = {err};
-  this->send_tcp_response_(client, txn_id, u, fc | (uint8_t) 0x80, data, 1);
-}
-
-#else
-
-void GrowattSunSpecTcp::setup_tcp_server_() {
-  ESP_LOGE(TAG, "growatt_sunspec_tcp is only implemented for ESP8266 (USE_ESP8266)");
-}
-
-void GrowattSunSpecTcp::handle_tcp_clients_() {}
-
-#endif
-
-bool GrowattSunSpecTcp::read_sunspec_registers_(uint16_t start_reg, uint16_t count, uint16_t *out) {
-  if (start_reg < SUNSPEC_BASE)
-    return false;
-  uint16_t off = start_reg - SUNSPEC_BASE;
-  if ((uint32_t) off + count > TOTAL_REGS)
-    return false;
-  memcpy(out, &this->register_map_[off], count * sizeof(uint16_t));
-  return true;
-}
-
-bool GrowattSunSpecTcp::write_sunspec_registers_(uint16_t start_reg, uint16_t count, const uint16_t *values) {
-  if (start_reg < SUNSPEC_BASE)
-    return false;
-  uint16_t off = start_reg - SUNSPEC_BASE;
-
-  if (off < OFF_M123 + 2 || (uint32_t) off + count > OFF_END) {
-    ESP_LOGW(TAG, "Reject write @%u (SunSpec offset %u) — Model 123 only", start_reg, off);
-    return false;
-  }
-
-  for (uint16_t i = 0; i < count; i++)
-    this->register_map_[off + i] = values[i];
-
-  uint16_t lim_off = OFF_M123 + 2 + 5;
-  uint16_t ena_off = OFF_M123 + 2 + 8;
-  bool touched = false;
-  for (uint16_t r = off; r < off + count; r++) {
-    if (r == lim_off || r == ena_off) {
-      touched = true;
-      break;
-    }
-  }
-  if (touched) {
-    uint16_t pct = this->register_map_[lim_off];
-    uint16_t ena = this->register_map_[ena_off];
-    ESP_LOGI(TAG, "DER WMaxLimPct(raw)=%u ena(raw)=%u", pct, ena);
-    this->forward_power_limit_(pct, ena == 1);
-  }
-  return true;
-}
-
 void GrowattSunSpecTcp::forward_power_limit_(uint16_t pct_raw, bool enabled) {
   this->last_der_command_ms_ = millis();
   float pct_f = pct_raw / 10.0f;
@@ -497,8 +98,6 @@ void GrowattSunSpecTcp::forward_power_limit_(uint16_t pct_raw, bool enabled) {
       g = 100;
     growatt_pct = (uint8_t) g;
   }
-  // SunSpec masters often re-write model 123 on a fixed schedule; repeating FC06 with the same % can
-  // disturb Growatt MPPT. Only queue when the effective limit changed (or RTU state was unknown).
   if (this->last_applied_growatt_pct_ != 255 && growatt_pct == this->last_applied_growatt_pct_) {
     ESP_LOGD(TAG, "DER unchanged (active power %%=%u), skip FC06", growatt_pct);
     return;

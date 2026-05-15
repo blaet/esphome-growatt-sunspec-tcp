@@ -1,22 +1,18 @@
 #pragma once
 
 #include "esphome/core/component.h"
-#include "esphome/components/modbus/modbus.h"
 #include "esphome/components/sensor/sensor.h"
-#include "../sunspec_inverter_tcp/sunspec_tcp_bridge.h"
-#include <vector>
+#include "sunspec_tcp_bridge.h"
 
-namespace esphome::growatt_sunspec_tcp {
+namespace esphome::sunspec_inverter_tcp {
 
-class GrowattSunSpecTcp : public Component, public modbus::ModbusDevice {
+/** Sensor-driven SunSpec Modbus TCP (models 1, 101, 120, 123). Model 123 writes update RAM only — no inverter RTU. */
+class SunspecInverterTcp : public Component {
  public:
   void setup() override;
   void loop() override;
   void dump_config() override;
-  float get_setup_priority() const override { return setup_priority::AFTER_WIFI; }
-
-  void on_modbus_data(const std::vector<uint8_t> &data) override;
-  void on_modbus_error(uint8_t function_code, uint8_t exception_code) override;
+  float get_setup_priority() const override { return setup_priority::LATE; }
 
   void set_tcp_port(uint16_t p) { this->bridge_.set_tcp_port(p); }
   void set_unit_id(uint8_t id) { this->bridge_.set_unit_id(id); }
@@ -24,9 +20,6 @@ class GrowattSunSpecTcp : public Component, public modbus::ModbusDevice {
   void set_manufacturer(const std::string &s) { this->bridge_.set_manufacturer(s); }
   void set_model(const std::string &s) { this->bridge_.set_model(s); }
   void set_serial(const std::string &s) { this->bridge_.set_serial(s); }
-  void set_holding_active_pct_reg(uint16_t r) { holding_active_pct_reg_ = r; }
-  void set_min_rtu_gap_ms(uint32_t ms) { min_rtu_gap_ms_ = ms; }
-  void set_der_idle_revert_ms(uint32_t ms) { der_idle_revert_ms_ = ms; }
 
   void set_ac_voltage_sensor(sensor::Sensor *s) { this->bridge_.set_ac_voltage_sensor(s); }
   void set_ac_current_sensor(sensor::Sensor *s) { this->bridge_.set_ac_current_sensor(s); }
@@ -37,20 +30,7 @@ class GrowattSunSpecTcp : public Component, public modbus::ModbusDevice {
   void set_cabinet_temp_sensor(sensor::Sensor *s) { this->bridge_.set_cabinet_temp_sensor(s); }
 
  protected:
-  void forward_power_limit_(uint16_t pct_raw_sunspec, bool enabled);
-
   sunspec_tcp_bridge::SunspecTcpBridge bridge_{};
-
-  uint16_t holding_active_pct_reg_{3};
-  uint32_t min_rtu_gap_ms_{850};
-  uint32_t der_idle_revert_ms_{300000};
-
-  uint32_t last_rtu_command_ms_{0};
-  uint32_t last_der_command_ms_{0};
-  bool expecting_rtu_ack_{false};
-  uint8_t pending_growatt_pct_{255};
-  uint8_t last_applied_growatt_pct_{255};
-  uint8_t inflight_growatt_pct_{255};
 };
 
-}  // namespace esphome::growatt_sunspec_tcp
+}  // namespace esphome::sunspec_inverter_tcp

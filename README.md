@@ -8,24 +8,40 @@ This repository follows the layout described under **Git → Example of git repo
 
 ## Overview
 
+**`growatt_sunspec_tcp`** (Growatt + Modbus RTU + DER):
+
 ```
 Growatt (RS485 RTU) ──► ESP8266 [growatt_solar] ──► sensors ──► [growatt_sunspec_tcp] ◄── Modbus TCP / SunSpec ── EMS / gateway
+```
+
+**`sunspec_inverter_tcp`** (sensor-only, no inverter RTU):
+
+```
+Any sensors (e.g. UART sniffer) ──► ESP32 / ESP8266 [sunspec_inverter_tcp] ◄── Modbus TCP / SunSpec
 ```
 
 | Role | Behaviour |
 |------|-----------|
 | **SunSpec (TCP)** | Logical map at base **40000**, models **1**, **101**, **120**, **123** (+ end). Values come from a RAM image refreshed from linked sensors. |
-| **Growatt (RTU)** | Same chip is a **Modbus master** (`modbus::ModbusDevice`). SunSpec TCP peers write **model 123** (immediate controls); firmware translates limits into **FC06** on a configurable holding register (default **3**, “active power %” on many Growatt Modbus V3.x docs). |
+| **`growatt_sunspec_tcp`** | Also a **Modbus master** (`modbus::ModbusDevice`). SunSpec **model 123** writes are translated into **FC06** on a configurable holding register (default **3**, “active power %” on many Growatt Modbus V3.x docs). |
+| **`sunspec_inverter_tcp`** | **No** Modbus RTU to an inverter. **Model 123** writes only update the in-memory map (DER is not forwarded to hardware). |
 
-**Platform:** Modbus TCP listen path is implemented only on **ESP8266**. Other targets log an error at runtime for TCP setup.
+**Platform:** Modbus TCP is implemented on **ESP8266** (Arduino `WiFiServer`) and **ESP32** (lwIP `socket` listen). Ethernet-only ESP32 builds use the same listen socket on the configured IP stack.
 
 **Tested:** Growatt **3000-S**, **ESP8266** (`esp07s`), SunSpec **model 101** (single-phase style). Three-phase setups often need model **103** or similar; this component does not implement that yet.
 
 ## Requirements
 
+**`growatt_sunspec_tcp`**
+
 - [**WiFi**](https://esphome.io/components/wifi.html) (station mode) so the ESP has a LAN IP reachable by SunSpec Modbus TCP peers.
 - [**UART**](https://esphome.io/components/uart.html) + [**Modbus**](https://esphome.io/components/modbus.html) hub wired to the inverter (same as `growatt_solar`).
 - [**growatt_solar**](https://esphome.io/components/sensor/growatt_solar.html) (or any sensors you map) providing `id:` handles for telemetry.
+
+**`sunspec_inverter_tcp`**
+
+- Network stack with an IP address (**Wi‑Fi** and/or **Ethernet** on ESP32).
+- [**Sensor**](https://esphome.io/components/sensor/) `id:` links for telemetry (same optional keys as Growatt: `ac_voltage`, `ac_power`, `energy_kwh`, …). **`energy_kwh`** should be **lifetime** energy (kWh) for correct SunSpec **WH** semantics; if you only have **daily** yield, values will not match SunSpec “total Wh” meaning.
 
 ## Installation
 
@@ -40,7 +56,7 @@ external_components:
       url: https://github.com/blaet/esphome-growatt-sunspec-tcp.git
       ref: main
       path: esphome/components
-    components: [growatt_sunspec_tcp]
+    components: [growatt_sunspec_tcp, sunspec_inverter_tcp]
 ```
 
 **Git shorthand (same source):**
@@ -49,7 +65,7 @@ external_components:
 external_components:
   - source: github://blaet/esphome-growatt-sunspec-tcp@main
     path: esphome/components
-    components: [growatt_sunspec_tcp]
+    components: [growatt_sunspec_tcp, sunspec_inverter_tcp]
 ```
 
 Optional: add `refresh:` per [External Components → Refresh](https://esphome.io/components/external_components.html) (ignored for `type: local`).
@@ -61,7 +77,7 @@ external_components:
   - source:
       type: local
       path: esphome-growatt-sunspec-tcp/esphome/components
-    components: [growatt_sunspec_tcp]
+    components: [growatt_sunspec_tcp, sunspec_inverter_tcp]
 ```
 
 Repository layout (matches ESPHome docs):
@@ -69,10 +85,16 @@ Repository layout (matches ESPHome docs):
 ```text
 esphome/
 └── components/
-    └── growatt_sunspec_tcp/
+    ├── growatt_sunspec_tcp/
+    │   ├── __init__.py
+    │   ├── growatt_sunspec_tcp.cpp
+    │   └── growatt_sunspec_tcp.h
+    └── sunspec_inverter_tcp/
         ├── __init__.py
-        ├── growatt_sunspec_tcp.cpp
-        └── growatt_sunspec_tcp.h
+        ├── sunspec_inverter_tcp.cpp
+        ├── sunspec_inverter_tcp.h
+        ├── sunspec_tcp_bridge.cpp
+        └── sunspec_tcp_bridge.h
 ```
 
 ## Configuration variables
@@ -97,6 +119,20 @@ _In addition to the keys below, this component extends [`COMPONENT_SCHEMA`](http
 | `energy_kwh` | sensor ID | — | Energy (kWh) → model **101** WH fields. |
 | `pv_power` | sensor ID | — | DC/PV power (W) → model **101**. |
 | `cabinet_temp` | sensor ID | — | Cabinet temperature (°C) → model **101**. |
+
+### `sunspec_inverter_tcp` (sensor-only)
+
+Extends [`COMPONENT_SCHEMA`](https://esphome.io/components/esphome/) only. No **`modbus_id`** / **`address`**.
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `tcp_port` | port | `502` | TCP listen port. |
+| `unit_id` | int | `126` | Modbus unit ID on TCP (1–247). |
+| `rated_power_w` | int | `3000` | SunSpec model **120** nameplate (W). |
+| `manufacturer` | string | `Generic` | Model **1** manufacturer. |
+| `model` | string | `Inverter` | Model **1** model. |
+| `serial` | string | `SUNSPEC-TCP` | Model **1** serial. |
+| `ac_voltage`, `ac_current`, `ac_power`, `frequency`, `energy_kwh`, `pv_power`, `cabinet_temp` | sensor ID | — | Same mapping as Growatt bridge; all optional. |
 
 ## Example
 
