@@ -1,4 +1,6 @@
-# Component: `growatt_sunspec_tcp`
+# esphome-sunspec-inverter-tcp
+
+ESPHome **SunSpec Modbus TCP** bridge components (generic **`sunspec_inverter_tcp`** and Growatt-specific **`growatt_sunspec_tcp`**).
 
 Bridge a **Growatt** inverter that already speaks **Modbus RTU** (typically via the bundled [`growatt_solar`](https://esphome.io/components/sensor/growatt_solar.html) sensor on a [`modbus`](https://esphome.io/components/modbus.html) hub) to **SunSpec Modbus TCP** clients (energy gateways, EMS stacks, test tools).
 
@@ -53,7 +55,7 @@ Load this repo with [**external_components**](https://esphome.io/components/exte
 external_components:
   - source:
       type: git
-      url: https://github.com/blaet/esphome-growatt-sunspec-tcp.git
+      url: https://github.com/blaet/esphome-sunspec-inverter-tcp.git
       ref: main
       path: esphome/components
     components: [growatt_sunspec_tcp, sunspec_inverter_tcp]
@@ -63,7 +65,7 @@ external_components:
 
 ```yaml
 external_components:
-  - source: github://blaet/esphome-growatt-sunspec-tcp@main
+  - source: github://blaet/esphome-sunspec-inverter-tcp@main
     path: esphome/components
     components: [growatt_sunspec_tcp, sunspec_inverter_tcp]
 ```
@@ -76,7 +78,7 @@ Optional: add `refresh:` per [External Components → Refresh](https://esphome.i
 external_components:
   - source:
       type: local
-      path: esphome-growatt-sunspec-tcp/esphome/components
+      path: esphome-sunspec-inverter-tcp/esphome/components
     components: [growatt_sunspec_tcp, sunspec_inverter_tcp]
 ```
 
@@ -152,7 +154,7 @@ modbus:
   turnaround_time: 850ms
 
 external_components:
-  - source: github://blaet/esphome-growatt-sunspec-tcp@main
+  - source: github://blaet/esphome-sunspec-inverter-tcp@main
     path: esphome/components
     components: [growatt_sunspec_tcp]
 
@@ -198,7 +200,7 @@ DER limiting via SunSpec **model 123** is described in [docs/CONFIGURATION.md](d
 
 ## Contributing
 
-Changes belong in this repository under `esphome/components/growatt_sunspec_tcp/`. After editing, run `esphome compile` against a YAML that pulls the component (local path or git). Prefer pinning **`ref`** to a commit SHA or tag in downstream firmware when you need reproducible builds.
+Changes belong in this repository under `esphome/components/growatt_sunspec_tcp/` and/or `esphome/components/sunspec_inverter_tcp/`. After editing, run `esphome compile` against a YAML that pulls the component (local path or git). Prefer pinning **`ref`** to a commit SHA or tag in downstream firmware when you need reproducible builds.
 
 ## License
 
